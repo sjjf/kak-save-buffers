@@ -48,7 +48,7 @@ declare-option -docstring "Use relative age (rather than absolute age) when deci
 # feed this through date in its date parsing functionality (see the info page
 # for details) - the actual invocation is:
 # 
-# `date -d "1970-01-01T00:00:00+00:00 + ${kak_max_age_load_buffers}" +%s`
+# `date -d "1970-01-01T00:00:00+00:00 + ${kak_opt_max_age_load_buffers}" +%s`
 #
 # which gives us the length in seconds of the specified period.
 #
@@ -60,7 +60,7 @@ declare-option -docstring "Age at which to stop loading buffers - date(1) string
 # if enabled, save the buffer list every time we create a buffer
 hook -group 'kak-save-buffers' global BufCreate .* %{
     evaluate-commands %sh{
-        if [ "${kak_enable_save_buffers}" = true ]; then
+        if [ "${kak_opt_enable_save_buffers}" = true ]; then
                 echo "save-buffers"
         fi
     }
@@ -69,7 +69,7 @@ hook -group 'kak-save-buffers' global BufCreate .* %{
 # update the saved buffer list when we explicitly close a buffer, too
 hook -group 'kak-save-buffers' global BufClose .* %{
     evaluate-commands %sh{
-        if [ "${kak_enable_save_buffers}" = true ]; then
+        if [ "${kak_opt_enable_save_buffers}" = true ]; then
                 echo "save-buffers"
         fi
     }
@@ -84,7 +84,7 @@ hook -group 'kak-save-buffers' global BufClose .* %{
 # types and so forth.
 hook -group 'kak-save-buffers' global KakBegin .* %{
     evaluate-commands %sh{
-        if [ "${kak_enable_load_buffers}" = true ]; then
+        if [ "${kak_opt_enable_load_buffers}" = true ]; then
                 old_disabled_hooks="${kak_opt_disabled_hooks}"
                 echo 'set global disabled_hooks kak-save-buffers'
                 echo "load-buffers"
@@ -95,7 +95,7 @@ hook -group 'kak-save-buffers' global KakBegin .* %{
 
 hook -group 'kak-save-buffers' global KakEnd .* %{
     evaluate-commands %sh{
-        if [ "${kak_enable_save_buffers}" = true ]; then
+        if [ "${kak_opt_enable_save_buffers}" = true ]; then
             echo 'set global disabled_hooks kak-save-buffers'
         fi
     }
@@ -227,7 +227,7 @@ define-command load-buffers -params 0..1 -docstring "Reload buffer list from a s
         # We want to load the files in ascending order of age - so newest to
         # oldest. We also want to capture their last modified date, and
         # compare that with the age of the save file. And finally, we want to
-        # load at least ${kak_min_load_buffers} buffers from the list,
+        # load at least ${kak_opt_min_load_buffers} buffers from the list,
         # regardless of how old they are (but still in age-ascending order).
         #
         # So, we feed the list of files through stat to get the mtime, sort
@@ -250,19 +250,19 @@ define-command load-buffers -params 0..1 -docstring "Reload buffer list from a s
         # The reference time is max_age_load_buffers before the mtime of the
         # saved buffers file.
         s_ref=$(date -r "$save_file" +%s)
-        if [ "${kak_rel_age_load_buffers}" != true ]; then
+        if [ "${kak_opt_rel_age_load_buffers}" != true ]; then
                 s_ref=$(date +%s)
         fi
-        max_age=$(date -d "1970-01-01T00:00:00+00:00 + ${kak_max_age_load_buffers}" +%s)
+        max_age=$(date -d "1970-01-01T00:00:00+00:00 + ${kak_opt_max_age_load_buffers}" +%s)
         ref=$((s_ref - max_age))
         loaded=0
         first=""
         while read -r age fname; do
-                if [ "$loaded" -le "${kak_min_load_buffers}" ]; then
+                if [ "$loaded" -le "${kak_opt_min_load_buffers}" ]; then
                         printf "edit %s\n" "$fname"
                         continue
                 fi
-                [ "$loaded" -gt "${kak_max_load_buffers}" ] && break
+                [ "$loaded" -gt "${kak_opt_max_load_buffers}" ] && break
                 [ "$age" -lt "$ref" ] && break
                 printf "edit %s\n" "$fname"
                 [ -z "$first" ] && first="$fname"
