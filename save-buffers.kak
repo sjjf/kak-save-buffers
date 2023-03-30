@@ -273,6 +273,7 @@ define-command load-buffers -params 0..1 -docstring "Reload buffer list from a s
         rm "$aged_files"
 
         if [ -n "$first" ]; then
+                printf "echo -debug 'buffer %s;'\n" "$first"
                 printf "buffer %s;\n" "$first"
         fi
 
