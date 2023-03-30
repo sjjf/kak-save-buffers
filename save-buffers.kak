@@ -258,22 +258,22 @@ define-command load-buffers -params 0..1 -docstring "Reload buffer list from a s
         first=""
         while read -r age fname; do
                 if [ "$loaded" -le "${kak_opt_min_load_buffers}" ]; then
-                        printf "edit %s\n" "$fname"
+                        printf "edit %s;\n" "$fname"
                         if [ -z "$first" ]; then
                                 first="$fname"
-                                printf "echo -debug %s\n" "$first"
+                                printf "echo -debug %s;\n" "$first"
                         fi
                         continue
                 fi
                 [ "$loaded" -gt "${kak_opt_max_load_buffers}" ] && break
                 [ "$age" -lt "$ref" ] && break
-                printf "edit %s\n" "$fname"
+                printf "edit %s;\n" "$fname"
                 loaded=$((loaded + 1))
         done < "$aged_files"
         rm "$aged_files"
 
         if [ -n "$first" ]; then
-                printf "buffer %s\n" "$first"
+                printf "buffer %s;\n" "$first"
         fi
 
     }
