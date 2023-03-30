@@ -12,7 +12,7 @@
 #
 
 # delimiter stolen from rc/filetye/java.kak
-provide-module puppet %§
+provide-module save_buffers %§
 
 # default to off, as this has potential to be intrusive
 declare-option -docstring "Whether to automaically save buffer state (default: false)" \
