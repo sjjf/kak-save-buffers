@@ -59,14 +59,12 @@ declare-option -docstring "Age at which to stop loading buffers - date(1) string
 
 # buffer to switch to as soon as we have a window to do it in
 declare-option -hidden str first_buffer
-declare-option -hidden bool load_first_buffer false
 
-# if we have the first_buffer option set, switch to it, then unset.
-hook -group 'kak-save-buffers' global ClientCreate .* %{
+# if we have the first_buffer option set, switch to it, then remove ourselves.
+hook -once global ClientCreate .* %{
     evaluate-commands %sh{
-        if [ "${kak_opt_load_first_buffer}" = true ]; then
+        if [ -n "${kak_opt_first_buffer}" ]; then
                 printf "buffer %s\n" "${kak_opt_first_buffer}"
-                printf "set-option global load_first_buffer false\n"
         fi
     }
 }
@@ -274,9 +272,8 @@ define-command load-buffers -params 0..1 -docstring "Reload buffer list from a s
                 if [ "$loaded" -le "${kak_opt_min_load_buffers}" ]; then
                         printf "edit %s;\n" "$fname"
                         if [ -z "$first" ]; then
-                                printf "set-option global first_buffer %s;\n" "$fname"
-                                printf "set-option global load_first_buffer true;\n"
                                 first="$fname"
+                                printf "set-option global first_buffer %s;\n" "$first"
                         fi
                         continue
                 fi
