@@ -11,9 +11,6 @@
 # Good Enough(tm) for my use case.
 #
 
-# delimiter stolen from rc/filetye/java.kak
-provide-module save_buffers %§
-
 # default to off, as this has potential to be intrusive
 declare-option -docstring "Whether to automaically save buffer state (default: false)" \
     bool enable_save_buffers false
@@ -276,5 +273,3 @@ define-command load-buffers -params 0..1 -docstring "Reload buffer list from a s
         printf "buffer %s\n" "$first"
     }
 }
-
-§
