@@ -11,19 +11,42 @@
 # Good Enough(tm) for my use case.
 #
 
+# list of things to look for in the current directory in order to decide
+# whether to do anything
+#
+# This is reasonably conservative, since we don't want to end up littering
+# the filesystem with save files.
+declare-option -docstring \
+"List of directories to look for in the current working directory.
+If none of these are found the hooks are disabled; if one is found the hooks
+are enabled, but will only run if enable_save_buffers/enable_load_buffers
+are set to true. An existing .kak_save.<session> file will also allow the
+hooks to be enabled, regardless of any other context." \
+    str sb_allowed_context_dirs ".git,.hg"
+
+declare-option -docstring \
+"List of files to look for in the current working directory.
+If none of these are found the hooks are disabled; if one is found the hooks
+are enabled, but will only run if enable_save_buffers/enable_load_buffers
+are set to true." \
+    str sb_allowed_context_files "pyproject.toml,setup.cfg,cargo.toml,README.md"
+
+# capture the fact that we're allowed to run
+declare-option -hidden bool sb_allowed false
+
 # default to off, as this has potential to be intrusive
 declare-option -docstring "Whether to automaically save buffer state (default: false)" \
-    bool enable_save_buffers false
+    bool sb_enable_save_buffers false
 
 # default to off, as this has even more potential to be intrusive than saving
 # buffers
 declare-option -docstring "Whether to automatically load saved buffer state (default: false)" \
-    bool enable_load_buffers false
+    bool sb_enable_load_buffers false
 
 # if there are less than this many entries in the saved buffer list, open
 # all of them regardless of their age
 declare-option -docstring "Open at least this many buffers, regardless of age (default: 20)" \
-    int min_load_buffers 20
+    int sb_min_load_buffers 20
 
 # if there are more than this many entries in the saved buffer list, don't
 # open any more regardless of how recent they are
@@ -31,12 +54,12 @@ declare-option -docstring "Open at least this many buffers, regardless of age (d
 # This is set to a large default so that it's not going to intrude on things
 # very often.
 declare-option -docstring "Do not open more than this many buffers (default: 200)" \
-    int max_load_buffers 200
+    int sb_max_load_buffers 200
 
 # use the age relative to the save file to decide whether to open a file, or
 # the absolute age
 declare-option -docstring "Use relative age (rather than absolute age) when deciding to load buffers (default: true)" \
-    bool rel_age_load_buffers true
+    bool sb_use_rel_age true
 
 # the actual age difference used to decide whether to load a file
 #
@@ -47,7 +70,7 @@ declare-option -docstring "Use relative age (rather than absolute age) when deci
 # Because of how fiddly this kind of processing generally is we
 # feed this through date in its date parsing functionality (see the info page
 # for details) - the actual invocation is:
-# 
+#
 # `date -d "1970-01-01T00:00:00+00:00 + ${kak_opt_max_age_load_buffers}" +%s`
 #
 # which gives us the length in seconds of the specified period.
@@ -55,20 +78,24 @@ declare-option -docstring "Use relative age (rather than absolute age) when deci
 # Yes, there are definitely better ways to deal with this, but none that I
 # can think of in a constrained shell environment.
 declare-option -docstring "Age at which to stop loading buffers - date(1) string (default '2 weeks')" \
-    str max_age_load_buffers '2 weeks'
+    str sb_age_diff '2 weeks'
+
+# the much simpler but far less easily interpreted option
+declare-option -docstring "Age difference at which to stop loading buffers, in seconds (default 1209600)" \
+    int sb_age_diff_s
 
 # how wide a window to use when deciding if an existing saved buffers file is
 # new enough to refresh rather than back up and recreate from scratch
 declare-option -hidden int sb_refresh_window 180
 
 # buffer to switch to as soon as we have a window to do it in
-declare-option -hidden str first_buffer
+declare-option -hidden str sb_first_buffer
 
 # if we have the first_buffer option set, switch to it, then remove ourselves.
 hook -once global ClientCreate .* %{
     evaluate-commands %sh{
-        if [ -n "${kak_opt_first_buffer}" ]; then
-                printf "buffer %s\n" "${kak_opt_first_buffer}"
+        if [ -n "${kak_opt_sb_first_buffer}" ]; then
+                printf "buffer %s\n" "${kak_opt_sb_first_buffer}"
         fi
     }
 }
@@ -76,7 +103,7 @@ hook -once global ClientCreate .* %{
 # if enabled, save the buffer list every time we create a buffer
 hook -group 'kak-save-buffers' global BufCreate .* %{
     evaluate-commands %sh{
-        if [ "${kak_opt_enable_save_buffers}" = true ]; then
+        if [ "${kak_opt_sb_enable_save_buffers}" = true ]; then
                 echo "save-buffers"
         fi
     }
@@ -85,7 +112,7 @@ hook -group 'kak-save-buffers' global BufCreate .* %{
 # update the saved buffer list when we explicitly close a buffer, too
 hook -group 'kak-save-buffers' global BufClose .* %{
     evaluate-commands %sh{
-        if [ "${kak_opt_enable_save_buffers}" = true ]; then
+        if [ "${kak_opt_sb_enable_save_buffers}" = true ]; then
                 echo "save-buffers"
         fi
     }
@@ -100,7 +127,7 @@ hook -group 'kak-save-buffers' global BufClose .* %{
 # types and so forth.
 hook -group 'kak-save-buffers' global KakBegin .* %{
     evaluate-commands %sh{
-        if [ "${kak_opt_enable_load_buffers}" = true ]; then
+        if [ "${kak_opt_sb_enable_load_buffers}" = true ]; then
                 old_disabled_hooks="${kak_opt_disabled_hooks}"
                 echo 'set global disabled_hooks kak-save-buffers'
                 echo "load-buffers"
@@ -111,8 +138,57 @@ hook -group 'kak-save-buffers' global KakBegin .* %{
 
 hook -group 'kak-save-buffers' global KakEnd .* %{
     evaluate-commands %sh{
-        if [ "${kak_opt_enable_save_buffers}" = true ]; then
+        if [ "${kak_opt_sb_enable_save_buffers}" = true ]; then
             echo 'set global disabled_hooks kak-save-buffers'
+        fi
+    }
+}
+
+# check whether the current directory has any of the contents that we use to
+# indicate that we're allowed to run - roughly speaking, we want to be in some
+# kind of persistent project context rather than just wherever.
+define-command -hidden sb-allowed -docstring "Check the current directory to see if we can run" %{
+    evaluate-commands %sh{
+        # first up, check for an existing saved buffers file
+        save_file=".kak_save.${kak_session}"
+        if [ -f "$save_file" ]; then
+                printf "echo -debug context: found %s;\n" "$save_file"
+                printf "set-option global sb_allowed true;\n"
+                return
+        fi
+        # next, check the contents of the current directory
+        dcontexts=$(echo "${kak_opt_sb_allowed_context_dirs}" |tr ',' ' ')
+        dlist=$(find . -maxdepth 1 -type d |sed -E -e 's/^\.\/?//')
+        for c in $dcontexts; do
+                for d in $dlist; do
+                        if echo "$d" |grep -q "^$c$"; then
+                                printf "echo -debug dir context: %s, matched by %s;\n" "$c" "$d"
+                                printf "set-option global sb_allowed true;\n"
+                                return
+                        fi
+                done
+        done
+        fcontexts=$(echo "${kak_opt_sb_allowed_context_files}" |tr ',' ' ')
+        flist=$(find . -maxdepth 1 -type f |sed -E -e 's/^\.\/?//')
+        for c in $fcontexts; do
+                for d in $flist; do
+                        if echo "$d" |grep -q "^$c$"; then
+                                printf "echo -debug file context: %s, matched by %s;\n" "$c" "$d"
+                                printf "set-option global sb_allowed true;\n"
+                                return
+                        fi
+                done
+        done
+        printf "echo -debug no allowed context found;\n"
+    }
+}
+
+# derive the sb_age_diff_s value from the sb_age_diff string
+define-command -hidden sb-derive-window %{
+    evaluate-commands %sh{
+        if [ -z "${kak_opt_sb_age_diff_s}" ]; then
+            age_diff=$(date -d "1970-01-01T00:00:00+00:00 + ${kak_opt_sb_age_diff}" +%s)
+            printf "set-option global sb_age_diff_s %d;\n" "$age_diff"
         fi
     }
 }
@@ -210,7 +286,7 @@ define-command load-buffers -params 0..1 -docstring "Reload buffer list from a s
         # The list is new-line separated - it's a bit fiddly to make it \0
         # separated with portable shell code, new line separated at least
         # means the filenames can have spaces and so forth without breaking
-        # things. 
+        # things.
         files=""
         while read line ; do
                 # clean out comments and trailing white space, continue if
@@ -252,7 +328,7 @@ define-command load-buffers -params 0..1 -docstring "Reload buffer list from a s
         echo "$files" |tr '\n' '\0'|xargs -0 stat -c '%Y %n'|sort -nr > "$aged_files"
 
         # Processing goes:
-        # 
+        #
         #   for each line:
         #     have we hit min_load_buffers?
         #       no: emit the edit command and move to next line
@@ -265,23 +341,23 @@ define-command load-buffers -params 0..1 -docstring "Reload buffer list from a s
         # The reference time is max_age_load_buffers before the mtime of the
         # saved buffers file.
         s_ref=$(date -r "$save_file" +%s)
-        if [ "${kak_opt_rel_age_load_buffers}" != true ]; then
+        if [ "${kak_opt_sb_use_rel_age}" != true ]; then
                 s_ref=$(date +%s)
         fi
-        max_age=$(date -d "1970-01-01T00:00:00+00:00 + ${kak_opt_max_age_load_buffers}" +%s)
+        max_age=$(date -d "1970-01-01T00:00:00+00:00 + ${kak_opt_sb_age_diff}" +%s)
         ref=$((s_ref - max_age))
         loaded=0
         first=""
         while read -r age fname; do
-                if [ "$loaded" -le "${kak_opt_min_load_buffers}" ]; then
+                if [ "$loaded" -le "${kak_opt_sb_min_load_buffers}" ]; then
                         printf "edit %s;\n" "$fname"
                         if [ -z "$first" ]; then
                                 first="$fname"
-                                printf "set-option global first_buffer %s;\n" "$first"
+                                printf "set-option global sb_first_buffer %s;\n" "$first"
                         fi
                         continue
                 fi
-                [ "$loaded" -gt "${kak_opt_max_load_buffers}" ] && break
+                [ "$loaded" -gt "${kak_opt_sb_max_load_buffers}" ] && break
                 [ "$age" -lt "$ref" ] && break
                 printf "edit %s;\n" "$fname"
                 loaded=$((loaded + 1))
@@ -289,3 +365,14 @@ define-command load-buffers -params 0..1 -docstring "Reload buffer list from a s
         rm "$aged_files"
     }
 }
+
+# Initial setup, wrapper function
+define-command sb-initialise -docstring \
+    "Initial setup command for the save buffers module - may be run repeatedly." \
+%{
+    sb-allowed
+    sb-derive-window
+}
+
+# run as soon as we're sourced
+sb-initialise
