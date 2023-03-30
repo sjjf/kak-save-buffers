@@ -129,7 +129,6 @@ define-command save-buffers -docstring "Save buffer list to a file in the curren
                         # save file is fresh, recreate it
                         rm "$save_file"
                 fi
-                rm "$ref"
         fi
 
         set -- ${kak_buflist}
