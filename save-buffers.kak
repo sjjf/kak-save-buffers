@@ -57,6 +57,20 @@ declare-option -docstring "Use relative age (rather than absolute age) when deci
 declare-option -docstring "Age at which to stop loading buffers - date(1) string (default '2 weeks')" \
     str max_age_load_buffers '2 weeks'
 
+# buffer to switch to as soon as we have a window to do it in
+declare-option -hidden str first_buffer
+declare-option -hidden bool load_first_buffer false
+
+# if we have the first_buffer option set, switch to it, then unset.
+hook -group 'kak-save-buffers' global ClientCreate .* %{
+    evaluate-commands %sh{
+        if [ "${kak_opt_load_first_buffer}" = true ]; then
+                printf "buffer %s\n" "${kak_opt_first_buffer}"
+                printf "set-option global load_first_buffer false\n"
+        fi
+    }
+}
+
 # if enabled, save the buffer list every time we create a buffer
 hook -group 'kak-save-buffers' global BufCreate .* %{
     evaluate-commands %sh{
@@ -260,8 +274,9 @@ define-command load-buffers -params 0..1 -docstring "Reload buffer list from a s
                 if [ "$loaded" -le "${kak_opt_min_load_buffers}" ]; then
                         printf "edit %s;\n" "$fname"
                         if [ -z "$first" ]; then
+                                printf "set-option global first_buffer %s;\n" "$fname"
+                                printf "set-option global load_first_buffer true;\n"
                                 first="$fname"
-                                printf "echo -debug %s;\n" "$first"
                         fi
                         continue
                 fi
@@ -271,10 +286,5 @@ define-command load-buffers -params 0..1 -docstring "Reload buffer list from a s
                 loaded=$((loaded + 1))
         done < "$aged_files"
         rm "$aged_files"
-
-        if [ -n "$first" ]; then
-                printf "evaluate-commands -try-client client0 buffer %s;\n" "$first"
-        fi
-
     }
 }
