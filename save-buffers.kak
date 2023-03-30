@@ -57,6 +57,10 @@ declare-option -docstring "Use relative age (rather than absolute age) when deci
 declare-option -docstring "Age at which to stop loading buffers - date(1) string (default '2 weeks')" \
     str max_age_load_buffers '2 weeks'
 
+# how wide a window to use when deciding if an existing saved buffers file is
+# new enough to refresh rather than back up and recreate from scratch
+declare-option -hidden int sb_refresh_window 180
+
 # buffer to switch to as soon as we have a window to do it in
 declare-option -hidden str first_buffer
 
@@ -129,7 +133,7 @@ define-command save-buffers -docstring "Save buffer list to a file in the curren
                 now=$(date +%s)
                 lmod=$(date -r "$save_file" +%s)
                 age=$((now - lmod))
-                if [ "$age" -gt 60 ]; then
+                if [ "$age" -gt "${kak_opt_sb_refresh_window}" ]; then
                         # save file is old, create a new one
                         mv "$save_file" "$save_file.$now"
                         gzip -9 "$save_file.$now"
