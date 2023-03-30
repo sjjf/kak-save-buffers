@@ -31,6 +31,13 @@ are enabled, but will only run if enable_save_buffers/enable_load_buffers
 are set to true." \
     str sb_allowed_context_files "pyproject.toml,setup.cfg,cargo.toml,README.md"
 
+# An environment variable that can be set to override the allowed context
+# checks. No default is set, this must be manually configured.
+declare-option -docstring \
+"Environment variable that can be used to override the default allowed context
+checks. Set to a non-empty string to allow the save buffers hooks to run." \
+    str sb_allowed_context_env
+
 # capture the fact that we're allowed to run
 declare-option -hidden bool sb_allowed false
 
@@ -149,7 +156,18 @@ hook -group 'kak-save-buffers' global KakEnd .* %{
 # kind of persistent project context rather than just wherever.
 define-command -hidden sb-allowed -docstring "Check the current directory to see if we can run" %{
     evaluate-commands %sh{
-        # first up, check for an existing saved buffers file
+        # do we have the override environment variable setting?
+        if [ -n "${kak_opt_sb_allowed_context_env}" ]; then
+                allow_env="${kak_opt_sb_allowed_context_env}"
+                # this is unpleasant, but . . .
+                eval "env_val=\"\$${allow_env}\""
+                if [ -n "$env_val" ]; then
+                        printf "echo -debug context: environment variable %s;\n" "$allow_env"
+                        printf "set-option global sb_allowed true;\n"
+                        return
+                fi
+        fi
+        # next, check for an existing saved buffers file
         save_file=".kak_save.${kak_session}"
         if [ -f "$save_file" ]; then
                 printf "echo -debug context: found %s;\n" "$save_file"
