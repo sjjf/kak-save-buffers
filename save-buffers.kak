@@ -22,7 +22,7 @@ If none of these are found the hooks are disabled; if one is found the hooks
 are enabled, but will only run if enable_save_buffers/enable_load_buffers
 are set to true. An existing .kak_save.<session> file will also allow the
 hooks to be enabled, regardless of any other context." \
-    str sb_allowed_context_dirs ".git,.hg"
+    str sb_allowed_context_dirs ".git,.hg,.svn"
 
 declare-option -docstring \
 "List of files to look for in the current working directory.
@@ -176,26 +176,20 @@ define-command -hidden sb-allowed -docstring "Check the current directory to see
         fi
         # next, check the contents of the current directory
         dcontexts=$(echo "${kak_opt_sb_allowed_context_dirs}" |tr ',' ' ')
-        dlist=$(find . -maxdepth 1 -type d |sed -E -e 's/^\.\/?//')
-        for c in $dcontexts; do
-                for d in $dlist; do
-                        if echo "$d" |grep -q "^$c$"; then
-                                printf "echo -debug dir context: %s, matched by %s;\n" "$c" "$d"
-                                printf "set-option global sb_allowed true;\n"
-                                return
-                        fi
-                done
+        for d in $dcontexts; do
+                if [ -d "$d" ]; then
+                        printf "echo -debug dir context: %s found;\n" "$d"
+                        printf "set-option global sb_allowed true;\n"
+                        return
+                fi
         done
         fcontexts=$(echo "${kak_opt_sb_allowed_context_files}" |tr ',' ' ')
-        flist=$(find . -maxdepth 1 -type f |sed -E -e 's/^\.\/?//')
-        for c in $fcontexts; do
-                for d in $flist; do
-                        if echo "$d" |grep -q "^$c$"; then
-                                printf "echo -debug file context: %s, matched by %s;\n" "$c" "$d"
-                                printf "set-option global sb_allowed true;\n"
-                                return
-                        fi
-                done
+        for f in $fcontexts; do
+                if [ -f "$f" ]; then
+                        printf "echo -debug file context: %s found;\n" "$f"
+                        printf "set-option global sb_allowed true;\n"
+                        return
+                fi
         done
         printf "echo -debug no allowed context found;\n"
     }

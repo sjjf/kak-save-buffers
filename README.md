@@ -45,7 +45,7 @@ be overridden by configuring an environment variable which will be checked.
 This doesn't directly override the checks, instead it sets up that variable
 as a way to override them - this means you can choose to start any given
 session with the override set or not, rather than having it set on a system
-wide basis.
+wide basis. All of these are configurable (see the config section for details)
 
 Once the gate is opened, the enable load/save buffers options are then used
 to enable the automated saving and loading hooks.
@@ -93,6 +93,8 @@ work right where you left off.
 A number of options are available to configure the details of the module's
 behaviour.
 
+## Thresholds
+
 The minimum and maximum thresholds can be set with the following (these values
 are the defaults):
 
@@ -132,3 +134,46 @@ saved buffers file - this can be changed to compare with the current time by
 setting the `sb_use_rel_age` option to `false`. This will prune the list of
 files much quicker, and will likely result in hitting the minimum threshold
 if you aren't very actively working on a project.
+
+## Allowed contexts
+
+As noted above, we don't want to leave saved buffer lists in random places
+all over the system - it only makes sense in a context that involves ongoing
+work on a consistent set of files. The default assumption is that this is
+only meaningful when in a project context - so something like a version
+control repo (with a `.git/` directory, a `.hg/` directory, and so on); or a
+project directory for a common programming language (e.g. a `pyproject.toml`
+or `setup.cfg` file for a Python project, a `cargo.toml` file for a Rust
+project). This is obviously not a comprehensive list, so we provide two ways
+to configure this: either by setting your own list of directories and files to
+search for, or by setting an environment variable that will override any search
+list.
+
+The most direct option, most useful in the context of something like a wrapper
+script, is the environment variable:
+
+```
+set-option global sb_allowed_context_env KAK_SAVE_BUFFERS
+```
+
+This tells us to check the state of the `KAK_SAVE_BUFFERS` environment variable
+in order to decide whether we're allowed to save buffers. The variable can have
+any name, and the test is for whether it expands to a non-empty string - this
+makes it very flexible.
+
+The less direct option is to specify a different list of directories and files
+to look for:
+
+```
+set-option global sb_allowed_context_dirs ".git,.hg,.svn"
+set-option global sb_allowed_context_files "pyproject.toml,setup.cfg,cargo.toml,README.md"
+```
+
+The `sb_allowed_context_dirs` option specifies directories to look for, the
+`sb_allowed_context_files` option specifies files to look for. The default
+values are shown above - these can be replaced wholesale, or added to using
+the `set-option -add` mechanism (in which case ensure that the `,` separator
+is added between the old and new values).
+
+As with other configuration elements, the `sb-initialise` command should be
+run after making these changes.
